@@ -10,7 +10,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 #define PRU_MEM_BASE 0x4B200000
 #define PRU_MEM_END 0x4B27FFFF
-#define PRU_MEM_LEN ((PRU_MEM_END) - (PRU_MEM_BASE))
+#define PRU_MEM_LEN ((PRU_MEM_END) - (PRU_MEM_BASE) + 1)
 
 static void* __iomem ppru_iomem;
 
@@ -36,6 +36,7 @@ void* allocate_pru(void){
 
 void deallocate_pru(void* pmem){
     if(pmem == NULL) return;
+    iounmap(pmem);
     release_mem_region(PRU_MEM_BASE, PRU_MEM_LEN);
 }
 
