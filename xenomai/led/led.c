@@ -2,6 +2,7 @@
 
 #include <linux/module.h>
 #include <linux/ioport.h>
+//#include <cobalt/kernel/thread.h>
 #include <rtdm/driver.h>
 
 
@@ -15,22 +16,35 @@ struct led_context {
     struct resource* p_oe_region;
     void* p_ctrl;
     void* p_oe;
+    rtdm_task_t led_task;
+    rtdm_event_t event;
+    nanosecs_rel_t toggle_period;
+    volatile int operate_thread;
+    volatile int led_figure;
 };
 
-/*
+
 static void led_thread(void* pargs){
 
     struct led_context* pctx = (struct led_context*)pargs;
+    int event_wait_result = 0;
+    int read_res = 0;
 
-    const int64_t SECOND = 1000000000;
-    rtdm_task_set_period(&pctx->task, 0, SECOND);
+    while(pctx->operate_thread){
+        read_res = ioread32(pctx->p_ctrl);
+        if(read_res != pctx->led_figure && read_res != ~pctx->led_figure)
+            read_res = pctx->led_figure;
+        iowrite32(~read_res, pctx->p_ctrl);
 
-    while(1){
-        rtdm_task_wait_period(NULL);
-        rtdm_printk(KERN_ALERT "print from task\n");
+        event_wait_result = rtdm_event_timedwait(&pctx->event, pctx->toggle_period, NULL);
+        if(event_wait_result != 0 && event_wait_result != -ETIMEDOUT){
+            break;
+        }
+
+
     }
 }
-*/
+
 
 static int led_open(struct rtdm_fd* fd, int oflags){
     rtdm_printk(KERN_ALERT "Opening led device\n");
@@ -73,6 +87,23 @@ static int led_open(struct rtdm_fd* fd, int oflags){
     }
 
     iowrite32(0, pctx->p_oe);
+
+    rtdm_event_init(&pctx->event, 0);
+    pctx->toggle_period = 1000000000;
+    pctx->operate_thread = 1;
+    pctx->led_figure = 0;
+
+    if(rtdm_task_init(&pctx->led_task, "LED task", led_thread, pctx, RTDM_TASK_LOWEST_PRIORITY, 0)){
+        release_mem_region(pctx->p_ctrl_region->start, 4);
+        release_mem_region(pctx->p_oe_region->start, 4);
+        iounmap(pctx->p_ctrl);
+
+        pctx->p_ctrl_region = NULL;
+        pctx->p_oe_region = NULL;
+        pctx->p_ctrl = NULL;
+
+        return -EACCES;
+    }
     rtdm_printk(KERN_ALERT "led device opened successfully\n");
     return 0;
 }
@@ -81,6 +112,10 @@ static void led_close(struct rtdm_fd* fd){
     rtdm_printk(KERN_ALERT "Closing led device\n");
 
     struct led_context *pctx = (struct led_context*) rtdm_fd_to_private(fd);
+
+    pctx->operate_thread = 0;
+    rtdm_event_signal(&pctx->event);
+    rtdm_task_join(&pctx->led_task);
 
     if(pctx->p_ctrl){
         iounmap(pctx->p_ctrl);
@@ -125,18 +160,26 @@ static ssize_t led_read(struct rtdm_fd *fd, void __user *buf, size_t size){
 static ssize_t led_write(struct rtdm_fd *fd, const void __user *buf, size_t size){
     struct led_context *pctx = rtdm_fd_to_private(fd);
 
-    if(size != 4){
+    if(size != 12){
         return -EPERM;
     }
 
     uint32_t write_value = 0;
+    int64_t toggle_period_ns = 0;
 
     int copy_result = 0;
-    if(!(copy_result = rtdm_copy_from_user(fd, &write_value, buf, size))){
+    if((copy_result = rtdm_copy_from_user(fd, &write_value, buf+8, 4))){
         return copy_result;
     }
 
-    iowrite32(write_value, pctx->p_ctrl);
+    if((copy_result = rtdm_copy_from_user(fd, &toggle_period_ns, buf, 8))){
+        return copy_result;
+    }
+
+    pctx->led_figure = write_value;
+    pctx->toggle_period = toggle_period_ns;
+
+    rtdm_event_pulse(&pctx->event);
 
     return size;
 }
