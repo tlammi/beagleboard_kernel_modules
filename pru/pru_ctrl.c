@@ -91,7 +91,7 @@ void pru_free_context(struct pru_context* pmapping,
 
         int res = _pru_get_addresses(pru_num, &clkctrl_addr, &prusscfg_addr,
                                      &pru0_iram_addr);
-        if (!res) return;
+        if (res) return;
         _pru_unmap_mem_region(pmapping->res_iram, pmapping->iram,
                               pru0_iram_addr, PRUSS_PRU_IRAM_SIZE);
         _pru_unmap_mem_region(pmapping->res_pruss_cfg, pmapping->pruss_cfg,
