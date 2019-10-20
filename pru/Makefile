@@ -4,7 +4,8 @@ YOCTO_SDK_ENV_FILE="/opt/poky/2.6.1/environment-setup-armv7at2hf-neon-poky-linux
 
 
 ifneq ($(KERNELRELEASE),)
-	obj-m := pru.o
+	obj-m += prumodule.o
+	prumodule-objs := pru_ctrl.o pru.o
 
 else
 	KERNELDIR ?= ${LINUX_SRC_PATH}

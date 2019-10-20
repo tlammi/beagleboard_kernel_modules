@@ -11,7 +11,7 @@
 #define CM_L4PER2_PRUSS1_CLKCTRL_ADDR 0x4a009718
 
 #define PRUSS1_PRU0_IRAM_ADDR (PRUSS1_SLAVE_PORT_ADDR + 0x34000)
-#define PRUSS_PRU_IRAM_SIZE 12 * 1024;
+#define PRUSS_PRU_IRAM_SIZE (12 * 1024)
 
 struct pruss_cfg_t {
         uint32_t revid;
@@ -44,11 +44,10 @@ struct pru_context {
 enum pru_icss_index { PRU_ICSS1 = 0, PRU_ICSS2 };
 enum pru_state_t { PRU_STATE_IDLE = 0, PRU_STATE_ACTIVE };
 
-int pru_init_memory_mappings(struct pru_context* pmapping,
-                             enum pru_icss_index pru_num);
+int pru_init_context(struct pru_context* pmapping, enum pru_icss_index pru_num);
 
-int pru_free_memory_mappings(struct pru_context* pmapping,
-                             enum pru_icss_index pru_num);
+void pru_free_context(struct pru_context* pmapping,
+                      enum pru_icss_index pru_num);
 
 int pru_load_program(struct pru_context* pmap, void* psrc);
 

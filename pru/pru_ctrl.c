@@ -1,11 +1,12 @@
 
 #include <linux/errno.h>
+#include <linux/ioport.h>
 
 #include "pru_ctrl.h"
 
-static int _pru_map_mem_reqion(struct resoure* pres, void* pmap, uint32_t start,
-                               uint32_t size) {
-        pres = request_mem_region(start, size);
+static int _pru_map_mem_reqion(struct resource* pres, void* pmap,
+                               uint32_t start, uint32_t size) {
+        pres = request_mem_region(start, size, "");
         if (!pres) {
                 printk(KERN_ERR "request_mem_reqion() failed: %08x\n", start);
                 return -EBUSY;
@@ -50,9 +51,9 @@ static int _pru_get_addresses(enum pru_icss_index pru_num, uint32_t* pclk_ctrl,
         return -EINVAL;
 }
 
-int pru_init_memory_mappings(struct pru_context* pmapping,
-                             enum pru_icss_index pru_num) {
-        if (pmapping) return -EINVAL;
+int pru_init_context(struct pru_context* pmapping,
+                     enum pru_icss_index pru_num) {
+        if (!pmapping) return -EINVAL;
         uint32_t clkctrl_addr, prusscfg_addr, pru0_iram_addr;
 
         int res = _pru_get_addresses(pru_num, &clkctrl_addr, &prusscfg_addr,
@@ -82,20 +83,19 @@ exit_failure:
         return -EIO;
 }
 
-int pru_free_memory_mappings(struct pru_context* pmapping,
-                             enum pru_icss_index pru_num) {
-        if (!pmapping) return -EINVAL;
+void pru_free_context(struct pru_context* pmapping,
+                      enum pru_icss_index pru_num) {
+        if (!pmapping) return;
 
         uint32_t clkctrl_addr, prusscfg_addr, pru0_iram_addr;
 
         int res = _pru_get_addresses(pru_num, &clkctrl_addr, &prusscfg_addr,
                                      &pru0_iram_addr);
-        if (!res) return res;
+        if (!res) return;
         _pru_unmap_mem_region(pmapping->res_iram, pmapping->iram,
                               pru0_iram_addr, PRUSS_PRU_IRAM_SIZE);
         _pru_unmap_mem_region(pmapping->res_pruss_cfg, pmapping->pruss_cfg,
-                              prusscfg_addr, sizeof(struct pruss_cft_t));
+                              prusscfg_addr, sizeof(struct pruss_cfg_t));
         _pru_unmap_mem_region(pmapping->res_clck_ctrl, pmapping->clk_ctrl,
                               clkctrl_addr, 4);
-        return 0;
 }

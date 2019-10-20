@@ -13,12 +13,23 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 static int pru_open(struct rtdm_fd* fd, int oflags) {
         rtdm_printk(KERN_ALERT "PRU driver opened\n");
+        struct pru_context* pctx = rtdm_fd_to_private(fd);
 
-        return 0;
+        int res = pru_init_context(pctx, PRU_ICSS1);
+        if (res) {
+                rtdm_printk("pru_init_context() failed: %i\n", res);
+                return res;
+        }
+
+        return res;
 }
 
 static void pru_close(struct rtdm_fd* fd) {
         rtdm_printk(KERN_ALERT "PRU driver closed\n");
+
+        struct pru_context* pctx = rtdm_fd_to_private(fd);
+
+        pru_free_context(pctx, PRU_ICSS1);
 }
 
 static ssize_t pru_read_rt(struct rtdm_fd* fd, void __user* buf, size_t size) {
@@ -41,11 +52,13 @@ static ssize_t pru_write(struct rtdm_fd* fd, const void __user* buf,
         return 0;
 }
 
-int pru_ioctl_rt(struct rtdm_fd* fd, unsigned int request, void __user* arg) {
+static int pru_ioctl_rt(struct rtdm_fd* fd, unsigned int request,
+                        void __user* arg) {
         return 0;
 }
 
-int pru_ioctl(struct rtdm_fd* fd, unsigned int request, void __user* arg) {
+static int pru_ioctl(struct rtdm_fd* fd, unsigned int request,
+                     void __user* arg) {
         return 0;
 }
 
@@ -57,8 +70,8 @@ struct rtdm_driver pru_driver = {
     .ops = {
         .open = pru_open,
         .close = pru_close,
-        .ioctl_rt = NULL,
-        .ioctl_nrt = NULL,
+        .ioctl_rt = pru_ioctl_rt,
+        .ioctl_nrt = pru_ioctl,
         .read_rt = pru_read_rt,
         .read_nrt = pru_read,
         .write_rt = pru_write_rt,
