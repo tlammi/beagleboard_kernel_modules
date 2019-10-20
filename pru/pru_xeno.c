@@ -54,12 +54,16 @@ static ssize_t pru_write(struct rtdm_fd* fd, const void __user* buf,
 
 static int pru_ioctl_rt(struct rtdm_fd* fd, unsigned int request,
                         void __user* arg) {
-        return 0;
+        return -EPERM;
 }
 
 static int pru_ioctl(struct rtdm_fd* fd, unsigned int request,
                      void __user* arg) {
-        return 0;
+        return -EPERM;
+}
+
+static int pru_mmap(struct rtdm_fd* fd, struct vm_area_struct* vma) {
+        return -EPERM;
 }
 
 struct rtdm_driver pru_driver = {
@@ -67,16 +71,15 @@ struct rtdm_driver pru_driver = {
     .device_flags = RTDM_NAMED_DEVICE,
     .context_size = sizeof(struct pru_context),
     .device_count = 1,
-    .ops = {
-        .open = pru_open,
-        .close = pru_close,
-        .ioctl_rt = pru_ioctl_rt,
-        .ioctl_nrt = pru_ioctl,
-        .read_rt = pru_read_rt,
-        .read_nrt = pru_read,
-        .write_rt = pru_write_rt,
-        .write_nrt = pru_write,
-    }};
+    .ops = {.open = pru_open,
+            .close = pru_close,
+            .ioctl_rt = pru_ioctl_rt,
+            .ioctl_nrt = pru_ioctl,
+            .read_rt = pru_read_rt,
+            .read_nrt = pru_read,
+            .write_rt = pru_write_rt,
+            .write_nrt = pru_write,
+            .mmap = pru_mmap}};
 
 struct rtdm_device pru_device = {.driver = &pru_driver, .label = "pru%d"};
 int __init pru_init(void) {
