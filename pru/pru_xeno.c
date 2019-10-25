@@ -30,13 +30,18 @@ static int pru_open(struct rtdm_fd* fd, int oflags) {
         rtdm_printk(KERN_ALERT "Clock control register value to write: %08x\n",
                     tmp);
         iowrite32(tmp, pctx->clkctrl.pmap);
-        int counter = 1000;
+        int counter = 10000;
         do {
                 tmp = ioread32(pctx->clkctrl.pmap);
                 counter--;
         } while (((tmp & (0x3 << 16)) == (3 << 16)) && counter);
 
-        if (!counter) return -EIO;
+        if (!counter) {
+                rtdm_printk(KERN_ALERT
+                            "Clock control register left in state: %08x\n",
+                            tmp);
+                return -EIO;
+        }
         rtdm_printk(KERN_ALERT
                     "Clock control register written. New value: %08x\n",
                     tmp);
@@ -60,7 +65,7 @@ static ssize_t pru_read_rt(struct rtdm_fd* fd, void __user* buf, size_t size) {
         if (!pctx) return -EINVAL;
 
         void* kbuf = rtdm_malloc(PRUSS_PRU_IRAM_SIZE);
-        ioread8_rep(pctx->iram.pmap, kbuf, PRUSS_PRU_IRAM_SIZE);
+        memcpy_fromio(kbuf, pctx->iram.pmap, PRUSS_PRU_IRAM_SIZE);
         if (!kbuf) return -ENOMEM;
 
         int res =
