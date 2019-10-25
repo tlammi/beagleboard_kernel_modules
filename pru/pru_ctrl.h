@@ -15,28 +15,22 @@
 #define PRUSS1_PRU0_IRAM_ADDR (PRUSS1_SLAVE_PORT_ADDR + 0x34000)
 #define PRUSS_PRU_IRAM_SIZE (12 * 1024)
 
-struct pru_reg_t {
-        struct resource* pres;
-        void* pmap;
-};
-
 struct pru_context {
-        struct pru_reg_t clkctrl;
-        struct pru_reg_t cfg;
-        struct pru_reg_t iram;
+        void* pclk;
+        void* pcfg;
+        void* piram;
 };
 
 enum pru_icss_index { PRU_ICSS1 = 0, PRU_ICSS2 };
 
-int pru_init_context(struct pru_context* pmapping, enum pru_icss_index pru_num);
+int pru_init_context(struct pru_context* pctx, enum pru_icss_index pru_num);
 
-void pru_free_context(struct pru_context* pmapping,
-                      enum pru_icss_index pru_num);
+void pru_free_context(struct pru_context* pctx, enum pru_icss_index pru_num);
 
-int pru_load_program(struct pru_context* pmap, void* psrc);
+int pru_load_program(struct pru_context* pctx, void* psrc);
 
-int pru_set_state(struct pru_context* pmap, enum pru_state_t new_state);
+// int pru_set_state(struct pru_context* pmap, enum pru_state_t new_state);
 
-enum pru_state_t pru_get_state(struct pru_context* pmap);
+// enum pru_state_t pru_get_state(struct pru_context* pmap);
 
 #endif  // _PRU_CTRL_H

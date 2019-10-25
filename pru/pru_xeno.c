@@ -18,21 +18,21 @@ static int pru_open(struct rtdm_fd* fd, int oflags) {
         // Allocate memory regions
         int res = pru_init_context(pctx, PRU_ICSS1);
         if (res) {
-                rtdm_printk(KERN_INFO "pru_init_context() failed: %i\n", res);
+                rtdm_printk(KERN_ERR "pru_init_context() failed: %i\n", res);
                 return res;
         }
         // Enable PRU clock domain gating
         rtdm_printk(KERN_ALERT "Enabling PRU-ICSS1/PRU0\n");
-        uint32_t tmp = ioread32(pctx->clkctrl.pmap);
+        uint32_t tmp = ioread32(pctx->pclk);
         rtdm_printk(KERN_ALERT "Clock control register has value %08x\n", tmp);
         tmp &= ~0x3;
         tmp |= 2;
         rtdm_printk(KERN_ALERT "Clock control register value to write: %08x\n",
                     tmp);
-        iowrite32(tmp, pctx->clkctrl.pmap);
+        iowrite32(tmp, pctx->pclk);
         int counter = 10000;
         do {
-                tmp = ioread32(pctx->clkctrl.pmap);
+                tmp = ioread32(pctx->pclk);
                 counter--;
         } while (((tmp & (0x3 << 16)) == (3 << 16)) && counter);
 
@@ -49,13 +49,15 @@ static int pru_open(struct rtdm_fd* fd, int oflags) {
 }
 
 static void pru_close(struct rtdm_fd* fd) {
-        rtdm_printk(KERN_ALERT "PRU driver closed\n");
+        rtdm_printk(KERN_ALERT "Closing PRU driver\n");
 
         struct pru_context* pctx = rtdm_fd_to_private(fd);
         // Disable PRU clock domain gating
-        uint32_t tmp = ioread32(pctx->clkctrl.pmap);
+        uint32_t tmp = ioread32(pctx->pclk);
+        rtdm_printk(KERN_ALERT "Clock register read\n");
         tmp &= ~0x3;
-        iowrite32(tmp, pctx->clkctrl.pmap);
+        iowrite32(tmp, pctx->pclk);
+        rtdm_printk(KERN_ALERT "Clock register written\n");
         // Free memory regions
         pru_free_context(pctx, PRU_ICSS1);
 }
@@ -66,7 +68,7 @@ static ssize_t pru_read_rt(struct rtdm_fd* fd, void __user* buf, size_t size) {
 
         void* kbuf = rtdm_malloc(PRUSS_PRU_IRAM_SIZE);
         if (!kbuf) return -ENOMEM;
-        memcpy_fromio(kbuf, pctx->iram.pmap, PRUSS_PRU_IRAM_SIZE);
+        memcpy_fromio(kbuf, pctx->piram, PRUSS_PRU_IRAM_SIZE);
 
         int res =
             rtdm_copy_to_user(fd, buf, kbuf, min(PRUSS_PRU_IRAM_SIZE, size));
@@ -94,7 +96,7 @@ static ssize_t pru_write_rt(struct rtdm_fd* fd, const void __user* buf,
                 return res;
         }
 
-        memcpy_toio(pctx->iram.pmap, kbuf, min(size, PRUSS_PRU_IRAM_SIZE));
+        memcpy_toio(pctx->piram, kbuf, min(size, PRUSS_PRU_IRAM_SIZE));
 
         rtdm_free(kbuf);
         return min(size, PRUSS_PRU_IRAM_SIZE);
@@ -134,19 +136,54 @@ struct rtdm_driver pru_driver = {
             .write_nrt = pru_write,
             .mmap = pru_mmap}};
 
-struct rtdm_device pru_device = {.driver = &pru_driver, .label = "pru%d"};
+struct rtdm_device pru_device = {
+    .driver = &pru_driver, .label = "pru%d", .device_data = NULL};
+
 int __init pru_init(void) {
-        int res = 0;
-        rtdm_printk(KERN_ALERT "Hello, Xenomai kernel\n");
-        if (res = rtdm_dev_register(&pru_device)) {
-                rtdm_printk(KERN_ERR "rtdm_printk() failed: %i\n", res);
-        }
-        return res;
+        struct resource* res = NULL;
+        int ret = -ENOMEM;
+
+        rtdm_printk(KERN_INFO "Requesting memory regions\n");
+        res = request_mem_region(CM_L4PER2_PRUSS1_CLKCTRL_ADDR, 4,
+                                 "PRU-ICSS1 CLK CTRL REG");
+        if (!res) goto do_exit;
+        res = request_mem_region(PRUSS1_CFG_REG_ADDR, PRUSS_CFG_REG_SIZE,
+                                 "PRU-ICSS1 CTRL REG");
+        if (!res) goto do_free_clkctrl;
+        res = request_mem_region(PRUSS1_PRU0_IRAM_ADDR, PRUSS_PRU_IRAM_SIZE,
+                                 "PRU-ICSS1 PRU0 IRAM");
+        if (!res) goto do_free_cfg;
+
+        rtdm_printk(KERN_INFO "Memory regions requested successfully\n");
+
+        // Set to non-null to indicate that resouces are allocated
+        pru_device.device_data = (void*)1;
+        ret = rtdm_dev_register(&pru_device);
+        if (!ret) return ret;
+        rtdm_printk(KERN_ERR "rtdm_printk() failed: %i\n", ret);
+
+        rtdm_printk(KERN_INFO "Releasing memory regions\n");
+do_free_cfg:
+        release_mem_region(PRUSS1_CFG_REG_ADDR, PRUSS_CFG_REG_SIZE);
+do_free_clkctrl:
+        release_mem_region(CM_L4PER2_PRUSS1_CLKCTRL_ADDR, 4);
+do_exit:
+        rtdm_printk(KERN_INFO "Memory regions released\n");
+        return ret;
 }
 
 void __exit pru_exit(void) {
-        rtdm_printk(KERN_ALERT "Goodbye, Xenomai kernel\n");
+        rtdm_printk(KERN_ALERT "Removing PRU driver\n");
+        if (pru_device.device_data) {
+                rtdm_printk(KERN_ALERT "Releasing memory regions\n");
+                release_mem_region(CM_L4PER2_PRUSS1_CLKCTRL_ADDR, 4);
+                release_mem_region(PRUSS1_CFG_REG_ADDR, PRUSS_CFG_REG_SIZE);
+                release_mem_region(PRUSS1_PRU0_IRAM_ADDR, PRUSS_PRU_IRAM_SIZE);
+                pru_device.device_data = NULL;
+        }
+        rtdm_printk(KERN_ALERT "Unregistering device\n");
         rtdm_dev_unregister(&pru_device);
+        rtdm_printk(KERN_ALERT "Device unregistered\n");
 }
 
 module_init(pru_init);
