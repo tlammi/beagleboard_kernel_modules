@@ -65,8 +65,8 @@ static ssize_t pru_read_rt(struct rtdm_fd* fd, void __user* buf, size_t size) {
         if (!pctx) return -EINVAL;
 
         void* kbuf = rtdm_malloc(PRUSS_PRU_IRAM_SIZE);
-        memcpy_fromio(kbuf, pctx->iram.pmap, PRUSS_PRU_IRAM_SIZE);
         if (!kbuf) return -ENOMEM;
+        memcpy_fromio(kbuf, pctx->iram.pmap, PRUSS_PRU_IRAM_SIZE);
 
         int res =
             rtdm_copy_to_user(fd, buf, kbuf, min(PRUSS_PRU_IRAM_SIZE, size));
@@ -83,7 +83,21 @@ static ssize_t pru_read(struct rtdm_fd* fd, void __user* buf, size_t size) {
 static ssize_t pru_write_rt(struct rtdm_fd* fd, const void __user* buf,
                             size_t size) {
         rtdm_printk(KERN_ALERT "PRU driver write called from RT context\n");
-        return size;
+        struct pru_context* pctx = rtdm_fd_to_private(fd);
+        void* kbuf = rtdm_malloc(PRUSS_PRU_IRAM_SIZE);
+        if (!kbuf) return -ENOMEM;
+        int res =
+            rtdm_copy_from_user(fd, kbuf, buf, min(size, PRUSS_PRU_IRAM_SIZE));
+
+        if (res) {
+                rtdm_free(kbuf);
+                return res;
+        }
+
+        memcpy_toio(pctx->iram.pmap, kbuf, min(size, PRUSS_PRU_IRAM_SIZE));
+
+        rtdm_free(kbuf);
+        return min(size, PRUSS_PRU_IRAM_SIZE);
 }
 static ssize_t pru_write(struct rtdm_fd* fd, const void __user* buf,
                          size_t size) {
