@@ -15,12 +15,31 @@ static int pru_open(struct rtdm_fd* fd, int oflags) {
         rtdm_printk(KERN_ALERT "PRU driver opened\n");
         struct pru_context* pctx = rtdm_fd_to_private(fd);
 
+        // Allocate memory regions
         int res = pru_init_context(pctx, PRU_ICSS1);
         if (res) {
-                rtdm_printk("pru_init_context() failed: %i\n", res);
+                rtdm_printk(KERN_INFO "pru_init_context() failed: %i\n", res);
                 return res;
         }
+        // Enable PRU clock domain gating
+        rtdm_printk(KERN_ALERT "Enabling PRU-ICSS1/PRU0\n");
+        uint32_t tmp = ioread32(pctx->clkctrl.pmap);
+        rtdm_printk(KERN_ALERT "Clock control register has value %08x\n", tmp);
+        tmp &= ~0x3;
+        tmp |= 2;
+        rtdm_printk(KERN_ALERT "Clock control register value to write: %08x\n",
+                    tmp);
+        iowrite32(tmp, pctx->clkctrl.pmap);
+        int counter = 1000;
+        do {
+                tmp = ioread32(pctx->clkctrl.pmap);
+                counter--;
+        } while (((tmp & (0x3 << 16)) == (3 << 16)) && counter);
 
+        if (!counter) return -EIO;
+        rtdm_printk(KERN_ALERT
+                    "Clock control register written. New value: %08x\n",
+                    tmp);
         return res;
 }
 
@@ -28,13 +47,28 @@ static void pru_close(struct rtdm_fd* fd) {
         rtdm_printk(KERN_ALERT "PRU driver closed\n");
 
         struct pru_context* pctx = rtdm_fd_to_private(fd);
-
+        // Disable PRU clock domain gating
+        uint32_t tmp = ioread32(pctx->clkctrl.pmap);
+        tmp &= ~0x3;
+        iowrite32(tmp, pctx->clkctrl.pmap);
+        // Free memory regions
         pru_free_context(pctx, PRU_ICSS1);
 }
 
 static ssize_t pru_read_rt(struct rtdm_fd* fd, void __user* buf, size_t size) {
-        rtdm_printk(KERN_ALERT "PRU driver read called from RT context\n");
-        return size;
+        struct pru_context* pctx = rtdm_fd_to_private(fd);
+        if (!pctx) return -EINVAL;
+
+        void* kbuf = rtdm_malloc(PRUSS_PRU_IRAM_SIZE);
+        ioread8_rep(pctx->iram.pmap, kbuf, PRUSS_PRU_IRAM_SIZE);
+        if (!kbuf) return -ENOMEM;
+
+        int res =
+            rtdm_copy_to_user(fd, buf, kbuf, min(PRUSS_PRU_IRAM_SIZE, size));
+
+        rtdm_free(kbuf);
+        if (res) return res;
+        return min(PRUSS_PRU_IRAM_SIZE, size);
 }
 static ssize_t pru_read(struct rtdm_fd* fd, void __user* buf, size_t size) {
         rtdm_printk(KERN_ALERT "PRU driver read called from non-RT context\n");

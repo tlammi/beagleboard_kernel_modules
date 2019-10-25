@@ -4,16 +4,15 @@
 
 #include "pru_ctrl.h"
 
-static int _pru_map_mem_reqion(struct resource* pres, void* pmap,
-                               uint32_t start, uint32_t size) {
-        pres = request_mem_region(start, size, "");
-        if (!pres) {
+static int _pru_map_mem_reqion(struct pru_reg_t* preg, uint32_t start,
+                               uint32_t size) {
+        preg->pres = request_mem_region(start, size, "");
+        if (!preg->pres) {
                 printk(KERN_ERR "request_mem_reqion() failed: %08x\n", start);
                 return -EBUSY;
         }
-
-        pmap = ioremap(start, size);
-        if (!pmap) {
+        preg->pmap = ioremap(start, size);
+        if (!preg->pmap) {
                 printk(KERN_ERR "ioremap() failed: %08x\n", start);
                 release_mem_region(start, size);
                 return -EIO;
@@ -22,16 +21,15 @@ static int _pru_map_mem_reqion(struct resource* pres, void* pmap,
         return 0;
 }
 
-static void _pru_unmap_mem_region(struct resource* pres, void* pmap,
-                                  uint32_t start, uint32_t size) {
-        if (pmap) {
-                iounmap(pmap);
-                pmap = NULL;
+static void _pru_unmap_mem_region(struct pru_reg_t* preg, uint32_t start,
+                                  uint32_t size) {
+        if (preg->pmap) {
+                iounmap(preg->pmap);
+                preg->pmap = NULL;
         }
-
-        if (pres) {
+        if (preg->pres) {
                 release_mem_region(start, size);
-                pres = NULL;
+                preg->pres = NULL;
         }
 }
 
@@ -39,7 +37,7 @@ static int _pru_get_addresses(enum pru_icss_index pru_num, uint32_t* pclk_ctrl,
                               uint32_t* pprusscfg, uint32_t* piram) {
         if (pru_num == PRU_ICSS1) {
                 *pclk_ctrl = CM_L4PER2_PRUSS1_CLKCTRL_ADDR;
-                *pprusscfg = PRUSS1_CFG_ADDR;
+                *pprusscfg = PRUSS1_CFG_REG_ADDR;
                 *piram = PRUSS1_PRU0_IRAM_ADDR;
                 return 0;
         } else if (pru_num == PRU_ICSS2) {
@@ -51,51 +49,43 @@ static int _pru_get_addresses(enum pru_icss_index pru_num, uint32_t* pclk_ctrl,
         return -EINVAL;
 }
 
-int pru_init_context(struct pru_context* pmapping,
-                     enum pru_icss_index pru_num) {
-        if (!pmapping) return -EINVAL;
+int pru_init_context(struct pru_context* pctx, enum pru_icss_index pru_num) {
+        if (!pctx) return -EINVAL;
         uint32_t clkctrl_addr, prusscfg_addr, pru0_iram_addr;
 
         int res = _pru_get_addresses(pru_num, &clkctrl_addr, &prusscfg_addr,
                                      &pru0_iram_addr);
         if (res) return res;
 
-        res = _pru_map_mem_reqion(pmapping->res_clck_ctrl, pmapping->clk_ctrl,
-                                  clkctrl_addr, 4);
+        res = _pru_map_mem_reqion(&pctx->clkctrl, clkctrl_addr, 4);
         if (res) goto exit_failure;
 
-        res = _pru_map_mem_reqion(pmapping->res_pruss_cfg, pmapping->pruss_cfg,
-                                  prusscfg_addr, sizeof(struct pruss_cfg_t));
+        res =
+            _pru_map_mem_reqion(&pctx->cfg, prusscfg_addr, PRUSS_CFG_REG_SIZE);
         if (res) goto do_unmap_clk_ctrl;
 
-        res = _pru_map_mem_reqion(pmapping->res_iram, pmapping->iram,
-                                  pru0_iram_addr, PRUSS_PRU_IRAM_SIZE);
+        res = _pru_map_mem_reqion(&pctx->iram, pru0_iram_addr,
+                                  PRUSS_PRU_IRAM_SIZE);
         if (res) goto do_unmap_pruss_cfg;
         return 0;
 
 do_unmap_pruss_cfg:
-        _pru_unmap_mem_region(pmapping->res_pruss_cfg, pmapping->pruss_cfg,
-                              prusscfg_addr, sizeof(struct pruss_cfg_t));
+        _pru_unmap_mem_region(&pctx->cfg, prusscfg_addr, PRUSS_CFG_REG_SIZE);
 do_unmap_clk_ctrl:
-        _pru_unmap_mem_region(pmapping->res_clck_ctrl, pmapping->clk_ctrl,
-                              clkctrl_addr, 4);
+        _pru_unmap_mem_region(&pctx->clkctrl, clkctrl_addr, 4);
 exit_failure:
         return -EIO;
 }
 
-void pru_free_context(struct pru_context* pmapping,
-                      enum pru_icss_index pru_num) {
-        if (!pmapping) return;
+void pru_free_context(struct pru_context* pctx, enum pru_icss_index pru_num) {
+        if (!pctx) return;
 
         uint32_t clkctrl_addr, prusscfg_addr, pru0_iram_addr;
 
         int res = _pru_get_addresses(pru_num, &clkctrl_addr, &prusscfg_addr,
                                      &pru0_iram_addr);
         if (res) return;
-        _pru_unmap_mem_region(pmapping->res_iram, pmapping->iram,
-                              pru0_iram_addr, PRUSS_PRU_IRAM_SIZE);
-        _pru_unmap_mem_region(pmapping->res_pruss_cfg, pmapping->pruss_cfg,
-                              prusscfg_addr, sizeof(struct pruss_cfg_t));
-        _pru_unmap_mem_region(pmapping->res_clck_ctrl, pmapping->clk_ctrl,
-                              clkctrl_addr, 4);
+        _pru_unmap_mem_region(&pctx->iram, pru0_iram_addr, PRUSS_PRU_IRAM_SIZE);
+        _pru_unmap_mem_region(&pctx->cfg, prusscfg_addr, PRUSS_CFG_REG_SIZE);
+        _pru_unmap_mem_region(&pctx->clkctrl, clkctrl_addr, 4);
 }
