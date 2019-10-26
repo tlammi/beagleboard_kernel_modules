@@ -40,12 +40,13 @@ static int pru_open(struct rtdm_fd* fd, int oflags) {
                 rtdm_printk(KERN_ALERT
                             "Clock control register left in state: %08x\n",
                             tmp);
+                pru_free_context(pctx, PRU_ICSS1);
                 return -EIO;
         }
         rtdm_printk(KERN_ALERT
                     "Clock control register written. New value: %08x\n",
                     tmp);
-        return res;
+        return 0;
 }
 
 static void pru_close(struct rtdm_fd* fd) {
