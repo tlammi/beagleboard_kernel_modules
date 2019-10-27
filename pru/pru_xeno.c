@@ -157,6 +157,9 @@ int __init pru_init(void) {
         res = request_mem_region(PRUSS1_PRU0_IRAM_ADDR, PRUSS_PRU_IRAM_SIZE,
                                  "PRU-ICSS1 PRU0 IRAM");
         if (!res) goto do_free_cfg;
+        res = request_mem_region(PRUSS1_PRU0_DRAM_ADDR, PRUSS_PRU_DRAM_SIZE,
+                                 "PRU-ICSS1 PRU0 DRAM");
+        if (!res) goto do_free_iram;
 
         rtdm_printk(KERN_INFO "Memory regions requested successfully\n");
 
@@ -167,6 +170,9 @@ int __init pru_init(void) {
         rtdm_printk(KERN_ERR "rtdm_printk() failed: %i\n", ret);
 
         rtdm_printk(KERN_INFO "Releasing memory regions\n");
+
+do_free_iram:
+        release_mem_region(PRUSS1_PRU0_IRAM_ADDR, PRUSS_PRU_IRAM_SIZE);
 do_free_cfg:
         release_mem_region(PRUSS1_CFG_REG_ADDR, PRUSS_CFG_REG_SIZE);
 do_free_clkctrl:
@@ -183,6 +189,7 @@ void __exit pru_exit(void) {
                 release_mem_region(CM_L4PER2_PRUSS1_CLKCTRL_ADDR, 4);
                 release_mem_region(PRUSS1_CFG_REG_ADDR, PRUSS_CFG_REG_SIZE);
                 release_mem_region(PRUSS1_PRU0_IRAM_ADDR, PRUSS_PRU_IRAM_SIZE);
+                release_mem_region(PRUSS1_PRU0_DRAM_ADDR, PRUSS_PRU_DRAM_SIZE);
                 pru_device.device_data = NULL;
         }
         rtdm_printk(KERN_ALERT "Unregistering device\n");

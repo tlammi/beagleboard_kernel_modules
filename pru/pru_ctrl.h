@@ -14,12 +14,18 @@
 #define CM_L4PER2_PRUSS1_CLKCTRL_ADDR 0x4a009718
 
 #define PRUSS1_PRU0_IRAM_ADDR (PRUSS1_SLAVE_PORT_ADDR + 0x34000)
+#define PRUSS1_PRU1_IRAM_ADDR (PRUSS1_SLAVE_PORT_ADDR + 0x38000)
 #define PRUSS_PRU_IRAM_SIZE (12 * 1024)
+
+#define PRUSS1_PRU0_DRAM_ADDR (PRUSS1_SLAVE_PORT_ADDR)
+#define PRUSS1_PRU1_DRAM_ADDR (PRUSS1_SLAVE_PORT_ADDR + 0x2000)
+#define PRUSS_PRU_DRAM_SIZE (8 * 1024)
 
 struct pru_context {
         void* pclk;
         void* pcfg;
         void* piram;
+        void* pdram;
 };
 
 enum pru_icss_index { PRU_ICSS1 = 0, PRU_ICSS2 };

@@ -10,13 +10,16 @@ int pru_init_context(struct pru_context* pctx, enum pru_icss_index pru_num) {
         pctx->pclk = NULL;
         pctx->pcfg = NULL;
         pctx->piram = NULL;
+        pctx->pdram = NULL;
 
         if (pru_num == PRU_ICSS1) {
                 pctx->pclk = ioremap(CM_L4PER2_PRUSS1_CLKCTRL_ADDR, 4);
                 pctx->pcfg = ioremap(PRUSS1_CFG_REG_ADDR, PRUSS_CFG_REG_SIZE);
                 pctx->piram =
                     ioremap(PRUSS1_PRU0_IRAM_ADDR, PRUSS_PRU_IRAM_SIZE);
-                if (pctx->pclk && pctx->pcfg && pctx->piram)
+                pctx->pdram =
+                    ioremap(PRUSS1_PRU0_DRAM_ADDR, PRUSS_PRU_DRAM_SIZE);
+                if (pctx->pclk && pctx->pcfg && pctx->piram && pctx->pdram)
                         goto exit_success;
                 else
                         err = -EIO;
@@ -30,10 +33,12 @@ int pru_init_context(struct pru_context* pctx, enum pru_icss_index pru_num) {
         if (pctx->pclk) iounmap(pctx->pclk);
         if (pctx->pcfg) iounmap(pctx->pcfg);
         if (pctx->piram) iounmap(pctx->piram);
+        if (pctx->pdram) iounmap(pctx->pdram);
 
         pctx->pclk = NULL;
         pctx->pcfg = NULL;
         pctx->piram = NULL;
+        pctx->pdram = NULL;
 
 exit_failure:
         rtdm_printk(KERN_ERR "Failed to initialize PRU context\n");
@@ -49,9 +54,11 @@ void pru_free_context(struct pru_context* pctx) {
         if (pctx->pclk) iounmap(pctx->pclk);
         if (pctx->pcfg) iounmap(pctx->pcfg);
         if (pctx->piram) iounmap(pctx->piram);
+        if (pctx->pdram) iounmap(pctx->pdram);
         pctx->pclk = NULL;
         pctx->pcfg = NULL;
         pctx->piram = NULL;
+        pctx->pdram = NULL;
 }
 
 void pru_set_device_state_async(struct pru_context* pctx,
