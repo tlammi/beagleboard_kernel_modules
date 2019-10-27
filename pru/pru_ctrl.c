@@ -11,6 +11,7 @@ int pru_init_context(struct pru_context* pctx, enum pru_icss_index pru_num) {
         pctx->pcfg = NULL;
         pctx->piram = NULL;
         pctx->pdram = NULL;
+        pctx->ram_target = PRU_ACCESS_IRAM;
 
         if (pru_num == PRU_ICSS1) {
                 pctx->pclk = ioremap(CM_L4PER2_PRUSS1_CLKCTRL_ADDR, 4);

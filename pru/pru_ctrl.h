@@ -21,15 +21,23 @@
 #define PRUSS1_PRU1_DRAM_ADDR (PRUSS1_SLAVE_PORT_ADDR + 0x2000)
 #define PRUSS_PRU_DRAM_SIZE (8 * 1024)
 
+enum pru_ram_access_target { PRU_ACCESS_IRAM = 0, PRU_ACCESS_DRAM };
+enum pru_icss_index { PRU_ICSS1 = 0, PRU_ICSS2 };
+enum pru_device_state { PRU_STATE_ENABLED = 0, PRU_STATE_DISABLED = 1 };
+
 struct pru_context {
         void* pclk;
         void* pcfg;
         void* piram;
         void* pdram;
+        enum pru_ram_access_target ram_target;
 };
 
-enum pru_icss_index { PRU_ICSS1 = 0, PRU_ICSS2 };
-enum pru_device_state { PRU_STATE_ENABLED = 0, PRU_STATE_DISABLED = 1 };
+#define pru_to_ram_ptr(pctx) \
+        ((pctx)->ram_target == PRU_ACCESS_IRAM ? (pctx)->piram : (pctx)->pdram)
+#define pru_to_ram_size(pctx)                                        \
+        ((pctx)->ram_target == PRU_ACCESS_IRAM ? PRUSS_PRU_IRAM_SIZE \
+                                               : PRUSS_PRU_DRAM_SIZE)
 
 int pru_init_context(struct pru_context* pctx, enum pru_icss_index pru_num);
 
