@@ -4,6 +4,46 @@
 #include <linux/ioport.h>
 #include <rtdm/driver.h>
 
+int pru_claim_memory_regions(void) {
+        struct resource* res = NULL;
+
+        rtdm_printk(KERN_INFO "Requesting memory regions\n");
+        res = request_mem_region(CM_L4PER2_PRUSS1_CLKCTRL_ADDR, 4,
+                                 "PRU-ICSS1 CLK CTRL REG");
+        if (!res) goto do_exit;
+        res = request_mem_region(PRUSS1_CFG_REG_ADDR, PRUSS_CFG_REG_SIZE,
+                                 "PRU-ICSS1 CTRL REG");
+        if (!res) goto do_free_clkctrl;
+        res = request_mem_region(PRUSS1_PRU0_IRAM_ADDR, PRUSS_PRU_IRAM_SIZE,
+                                 "PRU-ICSS1 PRU0 IRAM");
+        if (!res) goto do_free_cfg;
+        res = request_mem_region(PRUSS1_PRU0_DRAM_ADDR, PRUSS_PRU_DRAM_SIZE,
+                                 "PRU-ICSS1 PRU0 DRAM");
+        if (!res) goto do_free_iram;
+
+        rtdm_printk(KERN_INFO "Memory regions requested successfully\n");
+
+        return 0;
+
+do_free_iram:
+        release_mem_region(PRUSS1_PRU0_IRAM_ADDR, PRUSS_PRU_IRAM_SIZE);
+do_free_cfg:
+        release_mem_region(PRUSS1_CFG_REG_ADDR, PRUSS_CFG_REG_SIZE);
+do_free_clkctrl:
+        release_mem_region(CM_L4PER2_PRUSS1_CLKCTRL_ADDR, 4);
+do_exit:
+        rtdm_printk(KERN_INFO "Memory regions released\n");
+        return -ENOMEM;
+}
+
+void pru_release_memory_regions(void) {
+        rtdm_printk(KERN_INFO "Releasing memory regions\n");
+        release_mem_region(CM_L4PER2_PRUSS1_CLKCTRL_ADDR, 4);
+        release_mem_region(PRUSS1_CFG_REG_ADDR, PRUSS_CFG_REG_SIZE);
+        release_mem_region(PRUSS1_PRU0_IRAM_ADDR, PRUSS_PRU_IRAM_SIZE);
+        release_mem_region(PRUSS1_PRU0_DRAM_ADDR, PRUSS_PRU_DRAM_SIZE);
+}
+
 int pru_init_context(struct pru_context* pctx, enum pru_icss_index pru_num) {
         int err = -EINVAL;
         if (!pctx) goto exit_failure;
@@ -94,6 +134,6 @@ nanosecs_rel_t pru_wait_for_device_state(struct pru_context* pctx,
 
 enum pru_device_state pru_get_device_state(struct pru_context* pctx) {
         uint32_t regval = ioread32(pctx->pclk);
-        if (regval & (0x3) << 16 == 0x3 << 16) return PRU_STATE_DISABLED;
+        if ((regval & (0x3 << 16)) == 0x3 << 16) return PRU_STATE_DISABLED;
         return PRU_STATE_ENABLED;
 }

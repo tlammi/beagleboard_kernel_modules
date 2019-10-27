@@ -39,6 +39,9 @@ struct pru_context {
         ((pctx)->ram_target == PRU_ACCESS_IRAM ? PRUSS_PRU_IRAM_SIZE \
                                                : PRUSS_PRU_DRAM_SIZE)
 
+int pru_claim_memory_regions(void);
+void pru_release_memory_regions(void);
+
 int pru_init_context(struct pru_context* pctx, enum pru_icss_index pru_num);
 
 void pru_free_context(struct pru_context* pctx);
