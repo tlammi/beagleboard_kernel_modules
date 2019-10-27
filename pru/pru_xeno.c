@@ -21,32 +21,24 @@ static int pru_open(struct rtdm_fd* fd, int oflags) {
                 rtdm_printk(KERN_ERR "pru_init_context() failed: %i\n", res);
                 return res;
         }
-        // Enable PRU clock domain gating
-        rtdm_printk(KERN_ALERT "Enabling PRU-ICSS1/PRU0\n");
-        uint32_t tmp = ioread32(pctx->pclk);
-        rtdm_printk(KERN_ALERT "Clock control register has value %08x\n", tmp);
-        tmp &= ~0x3;
-        tmp |= 2;
-        rtdm_printk(KERN_ALERT "Clock control register value to write: %08x\n",
-                    tmp);
-        iowrite32(tmp, pctx->pclk);
-        int counter = 10000;
-        do {
-                tmp = ioread32(pctx->pclk);
-                counter--;
-        } while (((tmp & (0x3 << 16)) == (3 << 16)) && counter);
 
-        if (!counter) {
-                rtdm_printk(KERN_ALERT
-                            "Clock control register left in state: %08x\n",
-                            tmp);
-                pru_free_context(pctx, PRU_ICSS1);
-                return -EIO;
-        }
-        rtdm_printk(KERN_ALERT
-                    "Clock control register written. New value: %08x\n",
-                    tmp);
-        return 0;
+        // Enabled PRU clock domain gating
+        printk(KERN_INFO "Enabling PRU-ICSS\n");
+        pru_set_device_state_async(pctx, PRU_STATE_ENABLED);
+
+        // Wait for device state
+        printk(KERN_INFO "Waiting for PRU-ICSS to reach expected state\n");
+        res = pru_wait_for_device_state(pctx, PRU_STATE_ENABLED,
+                                        1000 * 1000 * 1000);
+        if (res) {
+                printk(KERN_ERR
+                       "PRU-ICSS did not reach the expected state within "
+                       "timeout\n");
+                pru_set_device_state_async(pctx, PRU_STATE_DISABLED);
+                pru_free_context(pctx);
+        } else
+                printk(KERN_INFO "PRU-ICSS reached the expected state\n");
+        return res;
 }
 
 static void pru_close(struct rtdm_fd* fd) {
@@ -60,7 +52,7 @@ static void pru_close(struct rtdm_fd* fd) {
         iowrite32(tmp, pctx->pclk);
         rtdm_printk(KERN_ALERT "Clock register written\n");
         // Free memory regions
-        pru_free_context(pctx, PRU_ICSS1);
+        pru_free_context(pctx);
 }
 
 static ssize_t pru_read_rt(struct rtdm_fd* fd, void __user* buf, size_t size) {
