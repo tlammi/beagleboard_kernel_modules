@@ -32,9 +32,18 @@ void pru_free_context(struct pru_context* pctx);
 void pru_set_device_state_async(struct pru_context* pctx,
                                 enum pru_device_state state);
 
-int pru_wait_for_device_state(struct pru_context* pctx,
-                              enum pru_device_state state,
-                              nanosecs_rel_t timeout_ns);
+/**
+ * @brief Wait for the device to reach expected state
+ *
+ * @param pctx
+ * @param state
+ * @param timeout_ns
+ * @return nanosecs_rel_t Time left before timeout. If timeout occurred, this is
+ * negative
+ */
+nanosecs_rel_t pru_wait_for_device_state(struct pru_context* pctx,
+                                         enum pru_device_state state,
+                                         nanosecs_rel_t timeout_ns);
 
 enum pru_device_state pru_get_device_state(struct pru_context* pctx);
 

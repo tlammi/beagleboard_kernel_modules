@@ -63,9 +63,9 @@ void pru_set_device_state_async(struct pru_context* pctx,
         iowrite32(tmp, pctx->pclk);
 }
 
-int pru_wait_for_device_state(struct pru_context* pctx,
-                              enum pru_device_state state,
-                              nanosecs_rel_t timeout_ns) {
+nanosecs_rel_t pru_wait_for_device_state(struct pru_context* pctx,
+                                         enum pru_device_state state,
+                                         nanosecs_rel_t timeout_ns) {
         int val = 0;
         bool is_expected_state = false;
         nanosecs_abs_t starttime = rtdm_clock_read_monotonic();
@@ -79,12 +79,9 @@ int pru_wait_for_device_state(struct pru_context* pctx,
                         is_expected_state = !is_enabled;
 
                 delta_ns = rtdm_clock_read_monotonic() - starttime;
-        } while (!is_expected_state && delta_ns < timeout_ns);
+        } while (!is_expected_state && delta_ns <= timeout_ns);
 
-        if (is_expected_state)
-                return 0;
-        else
-                return -EIO;
+        return timeout_ns - delta_ns;
 }
 
 enum pru_device_state pru_get_device_state(struct pru_context* pctx) {

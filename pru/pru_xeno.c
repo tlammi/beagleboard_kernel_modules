@@ -9,12 +9,15 @@
 
 #include "pru_ctrl.h"
 
+// 1s
+#define DEVICE_STATE_WAIT_TIMEOUT_NS (1000 * 1000 * 1000)
+
 MODULE_LICENSE("Dual BSD/GPL");
 
 static int pru_open(struct rtdm_fd* fd, int oflags) {
         rtdm_printk(KERN_ALERT "PRU driver opened\n");
         struct pru_context* pctx = rtdm_fd_to_private(fd);
-
+        nanosecs_rel_t time_left;
         // Allocate memory regions
         int res = pru_init_context(pctx, PRU_ICSS1);
         if (res) {
@@ -28,16 +31,24 @@ static int pru_open(struct rtdm_fd* fd, int oflags) {
 
         // Wait for device state
         printk(KERN_INFO "Waiting for PRU-ICSS to reach expected state\n");
-        res = pru_wait_for_device_state(pctx, PRU_STATE_ENABLED,
-                                        1000 * 1000 * 1000);
-        if (res) {
+        time_left = pru_wait_for_device_state(pctx, PRU_STATE_ENABLED,
+                                              DEVICE_STATE_WAIT_TIMEOUT_NS);
+        if (time_left < 0) {
                 printk(KERN_ERR
                        "PRU-ICSS did not reach the expected state within "
-                       "timeout\n");
+                       "timeout (ns): %llu. Overshoot (ns): %lli\n",
+                       DEVICE_STATE_WAIT_TIMEOUT_NS, -time_left);
                 pru_set_device_state_async(pctx, PRU_STATE_DISABLED);
                 pru_free_context(pctx);
-        } else
-                printk(KERN_INFO "PRU-ICSS reached the expected state\n");
+                res = -EIO;
+        } else {
+                printk(KERN_INFO
+                       "PRU-ICSS reached the expected state. Time left before "
+                       "timeout: %lli\n",
+                       time_left);
+                res = 0;
+        }
+
         return res;
 }
 
